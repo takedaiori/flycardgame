@@ -6,7 +6,7 @@
 
 小时候，你有没有蹲在地上，用一张卡去砸另一张卡，砸翻面了，那张卡就归你了？放学路上、教室门口、跳远沙坑，随便找一块平地就是战场。小卖部两毛钱一包干脆面，里面那张卡片，就是全部的“本钱”。
 
-**《飞卡》就是那个游戏的电脑版。** 但做了一些“适合电脑游戏直觉”的改动：不用蹲在地上，不用使劲甩胳膊怕把牌甩飞，不用因为地不平而吃亏。取而代之的是**拖拽 → 松手**，卡牌贴着牌桌直线滑出去，然后……等它停稳，看它盖住了对方多少。
+**《飞卡》就是那个游戏的电脑版。** 但做了一些“符合电脑游戏直觉”的改动：不用蹲在地上，不用使劲甩胳膊怕把牌甩飞，不用因为地不平而吃亏。取而代之的是**拖拽 → 松手**，卡牌贴着牌桌直线滑出去，然后……等它停稳，看它盖住了对方多少。
 
 ---
 
@@ -14,11 +14,11 @@
 
 你和 AI 各控制一张扑克牌，在**同一张牌桌**上轮流把牌滑出去。
 
-> **让你的牌最终覆盖对方的牌。覆盖率达到 67%，赢下本局。**
+> **让你的牌最终覆盖对方的牌。覆盖率达到一定程度，就能赢下本局。**
 
 不是“打翻面”，而是“盖上去”——这是从童年地面游戏到电脑游戏最直觉的一次改动。地面上卡牌翻不翻面，一半靠力度，一半靠地砖缝和运气。俯视牌桌上没有地砖缝，卡牌只会沿着直线滑行、减速、停下。**结果变得可控，手感变成了真正的技术。**
 
-三局两胜制。如果某一投盖到了 **99.01% 以上**，卡牌会自动吸附到 100%，触发 **完美覆盖**，直接赢下整场比赛，不管当前比分是多少。
+三局两胜制。如果某一投盖到了 **某个覆盖率以上**，就会触发 **完美覆盖**，直接赢下整场比赛，不管当前比分是多少。
 
 ---
 
@@ -103,7 +103,7 @@ You and the AI each control one playing card on the **same tabletop**, taking tu
 
 Not "flip it over" but "cover it" — the most intuitive translation from the playground to a computer game. On concrete, whether a card flipped depended half on force and half on cracks and luck. On a top-down table, there are no cracks. Cards glide in straight lines, slow down, and stop. **The outcome becomes controllable, and touch becomes real skill.**
 
-Best of three. If a shot covers **99.01% or more**, the card snaps to 100%, triggering **Perfect Coverage** and instantly winning the entire match, no matter the current score.
+Best of three. 
 
 ---
 
