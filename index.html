@@ -1,0 +1,1261 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>飞卡 FlyCard · v0.4 Demo</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { width: 100%; height: 100%; overflow: hidden; }
+  body {
+    background: #241d17;
+    font-family: "PingFang SC", "Microsoft YaHei", "Hiragino Sans GB", system-ui, sans-serif;
+    color: #f2ece1;
+    -webkit-user-select: none; user-select: none;
+    display: flex; align-items: center; justify-content: center;
+  }
+  #app {
+    position: relative; width: 100%; height: 100%;
+    max-width: 1100px; max-height: 780px;
+    background: #6d5238;
+    box-shadow: 0 10px 40px rgba(0,0,0,.55);
+    overflow: hidden;
+  }
+  /* ---------- HUD ---------- */
+  #hud {
+    position: absolute; top: 0; left: 0; right: 0; height: 56px;
+    display: flex; align-items: center; justify-content: center; gap: 14px;
+    padding: 0 16px; z-index: 5; pointer-events: none;
+  }
+  .score-board {
+    display: flex; align-items: center; gap: 12px;
+    background: rgba(20,16,12,.55);
+    border: 1px solid rgba(255,255,255,.10);
+    border-radius: 999px; padding: 6px 18px;
+    font-variant-numeric: tabular-nums;
+  }
+  .side { font-size: 15px; font-weight: 700; letter-spacing: 1px; }
+  .side.player { color: #ff9c8f; }
+  .side.ai { color: #e9e2d5; }
+  .pips { display: flex; gap: 5px; }
+  .pip { width: 11px; height: 11px; border-radius: 50%; background: rgba(255,255,255,.16); border: 1px solid rgba(0,0,0,.35); }
+  .pip.on.player { background: #e05a44; border-color: #ff9c8f; }
+  .pip.on.ai { background: #e9e2d5; border-color: #fff; }
+  .vs { font-size: 13px; color: #a89b86; font-weight: 700; }
+  #roundInfo { font-size: 13px; color: #b9aa92; font-weight: 600; }
+
+  #hint {
+    position: absolute; top: 62px; left: 0; right: 0; text-align: center;
+    font-size: 14px; color: #cbbfaa; z-index: 5; pointer-events: none;
+    min-height: 20px; padding: 0 20px; text-shadow: 0 1px 3px rgba(0,0,0,.5);
+  }
+  #banner {
+    position: absolute; left: 0; right: 0; top: 44%; text-align: center;
+    font-size: 32px; font-weight: 800; letter-spacing: 2px;
+    z-index: 6; pointer-events: none;
+    opacity: 0; transition: opacity .18s ease, transform .18s ease;
+    transform: scale(.92); text-shadow: 0 2px 10px rgba(0,0,0,.6);
+    color: #fff;
+  }
+  #banner.show { opacity: 1; transform: scale(1); }
+  #banner.good { color: #7ce0a8; }
+  #banner.great { color: #ffd166; }
+
+  canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+
+  #overlay {
+    position: absolute; inset: 0; z-index: 20;
+    background: rgba(24,18,13,.90);
+    display: none; flex-direction: column; align-items: center; justify-content: center; gap: 14px;
+  }
+  #overlay.show { display: flex; }
+  #overlay h1 { font-size: 30px; letter-spacing: 2px; }
+  #overlay p { font-size: 14px; color: #b9aa92; }
+  #overlay button {
+    margin-top: 6px; font: inherit; font-size: 15px; font-weight: 700;
+    padding: 10px 26px; border-radius: 999px; border: none; cursor: pointer;
+    background: #e9e2d5; color: #241d17;
+  }
+  #overlay button:hover { background: #ffd166; }
+
+  #foot {
+    position: absolute; bottom: 8px; left: 0; right: 0; text-align: center;
+    font-size: 12px; color: #8d7f6b; z-index: 5; pointer-events: none;
+  }
+
+  #debug {
+    position: absolute; left: 8px; bottom: 26px; z-index: 30;
+    font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 11px; line-height: 1.5;
+    background: rgba(20,22,28,.9); color: #9ef2b8; padding: 8px 10px; border-radius: 6px;
+    display: none; white-space: pre; max-width: 92%; overflow: auto; max-height: 46%;
+  }
+  #debug.show { display: block; }
+  #fatal {
+    position: absolute; inset: 0; z-index: 99; background: #1b1d22; color: #ff8080;
+    padding: 20px; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px;
+    white-space: pre-wrap; overflow: auto; display: none;
+  }
+  #fatal.show { display: block; }
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="hud">
+    <div class="score-board">
+      <span class="side player">玩家</span>
+      <span class="pips" id="pipsPlayer"><i class="pip"></i><i class="pip"></i></span>
+      <span class="vs">:</span>
+      <span class="pips" id="pipsAi"><i class="pip"></i><i class="pip"></i></span>
+      <span class="side ai">AI</span>
+    </div>
+    <div id="roundInfo">第 1 局</div>
+  </div>
+
+  <div id="hint"></div>
+  <div id="banner"></div>
+  <canvas id="game"></canvas>
+
+  <div id="foot">按住卡牌 → 向后拖拽 → 松手推出 &nbsp;·&nbsp; R 重开 &nbsp;·&nbsp; D 调试面板</div>
+
+  <div id="overlay">
+    <h1 id="ovTitle">比赛结束</h1>
+    <p id="ovDesc"></p>
+    <button id="ovBtn" type="button">再来一场</button>
+  </div>
+
+  <div id="debug"></div>
+  <div id="fatal"></div>
+</div>
+
+<script>
+"use strict";
+/* =========================================================================
+ *  《飞卡》FlyCard v0.4 —— 单文件 HTML5 Demo
+ *
+ *  v0.4 三条核心修订：
+ *   1. 空间改为【桌面俯视】：不再有重力下坠，卡牌贴着桌布做水平滑行（库仑摩擦减速）。
+ *   2. 物理数值全面收敛：挡边恢复系数仅 0.34、旋转幅度 1.2~3.0 rad/s 且快速衰减、
+ *      卡牌间最大滑动仅卡牌尺寸的 0.5%。目标手感是"一张纸牌"，不是三维弹球。
+ *   3. 胜利覆盖率 65% → 55% → 71% → 67%（v0.5 因卡牌更可控回调上调，v0.6 再下调 4 个百分点）。
+ *
+ *  ---------------------------------------------------------------------------
+ *  针对 "Cannot read properties of null (reading 'active')" 这类崩溃的防御策略
+ *  （代码中以 [NULL-SAFE] 标注）：
+ *   1. DOM 与 canvas 2d 上下文在启动时一次性校验，缺失则给出可读提示而非静默崩溃；
+ *   2. 卡牌对象在 reset 期间会被置为 null，所有访问一律先取本地引用再判空，
+ *      绝不在长表达式里连续取属性（a.b.c 一律拆成 a && a.b && a.b.c）；
+ *   3. 不使用裸 setTimeout 保存游戏状态回调（重置后会访问到已作废的对象），
+ *      改用随游戏状态一起被清空的定时器队列；
+ *   4. 主循环与所有事件回调都包在 try/catch 里，异常落到页面调试面板，
+ *      并且只报一次、切断循环，不刷屏；
+ *   5. 数组/映射取值一律做边界与存在性检查（getCard / getOtherCard）；
+ *   6. 不存在的字段永不读取：卡牌状态字段统一为 settled，不存在 active 字段。
+ * ========================================================================= */
+
+/* ============================ 0. 启动与环境校验 ============================ */
+(function bootstrap() {
+  const $ = (id) => document.getElementById(id);
+  const fatalEl = $("fatal");
+  let crashed = false;
+
+  function fatal(msg) { // [NULL-SAFE] 任何致命问题都可视化，而不是抛到控制台
+    if (!fatalEl || crashed) return;
+    crashed = true;
+    fatalEl.className = "show";
+    fatalEl.textContent = "《飞卡》启动失败\n\n" + msg;
+  }
+  function reportError(err, where) {
+    const txt = "[" + (where || "runtime") + "] " + (err && err.stack ? err.stack : String(err));
+    console.error(txt);
+    if (crashed) return;
+    if (fatalEl) {
+      fatalEl.className = "show";
+      fatalEl.textContent = "运行异常（游戏已安全停止，按 R 可重开）\n\n" + txt;
+    }
+  }
+
+  const canvas = $("game");
+  if (!canvas) { fatal("找不到 <canvas id=\"game\">"); return; }
+  const ctx = canvas.getContext ? canvas.getContext("2d") : null; // [NULL-SAFE]
+  if (!ctx) { fatal("当前浏览器无法创建 Canvas 2D 上下文"); return; }
+
+  const dom = {
+    hint: $("hint"), banner: $("banner"), overlay: $("overlay"),
+    ovTitle: $("ovTitle"), ovDesc: $("ovDesc"), ovBtn: $("ovBtn"),
+    roundInfo: $("roundInfo"), debug: $("debug"),
+    pipsPlayer: $("pipsPlayer"), pipsAi: $("pipsAi")
+  };
+
+  /* ============================ 1. 常量（v0.4 桌面物理） ============================ */
+  const CARD_RATIO     = 2.5 / 3.5;  // 扑克牌标准比例
+
+  // ---- 桌面滑行：无重力，只有摩擦 ----
+  const TABLE_FRICTION = 1150;       // 桌面摩擦（库仑模型，恒定减速度 px/s²）
+  const FELT_DRAG      = 0.25;       // 桌布绒毛的极轻阻力（线性 /s），仅柔化末段
+  const RAIL_REST      = 0.34;       // 挡边法向恢复系数：撞边后只剩 34% 速度
+  const RAIL_TANGENT   = 0.78;       // 挡边切向保留系数
+
+  // ---- 克制的旋转 ----
+  const SPIN_MIN       = 1.2;        // 旋转初速下限 rad/s
+  const SPIN_RANGE     = 1.8;        // 旋转初速随机区间 rad/s
+  const SPIN_DECAY     = 2.2;        // 旋转衰减 /s（很快停下）
+
+  const STOP_SPEED     = 26;         // 判定为"开始静止"的速度阈值 px/s
+  const SETTLE_TIME    = 0.30;       // 静止持续时间 s
+  const MAX_FLIGHT     = 8;          // 单次滑行硬上限 s（兜底，防死循环）
+  const MIN_SPEED      = 270;        // 初速下限 → 滑行约 30px（保证最小力度也有可见位移）
+  const MAX_SPEED      = 1400;       // 初速上限 → 滑行约 850px
+
+  const WIN_COVER      = 0.67;       // 67% 赢得本局（v0.6：由 v0.5 的 71% 下调 4 个百分点）
+  const PERFECT        = 0.9901;     // 99.01% 吸附阈值
+  const NEAR_MISS      = 0.90;       // 高于此覆盖率提示"就差一点"
+  const SLIDE_MAX      = 0.005;      // 卡牌间最大滑动 = 卡牌尺寸的 0.5%
+  const MAX_EXTRA      = 3;          // 额外投掷（脱离）最多尝试次数
+
+  // ---- v0.5 AI 犯错模型：AI 必须"很傻"，且经常完全打空 ----
+  const AI_SEARCH_ANG  = 0.34;       // 搜索角度步长（越大，AI 找到的"最优解"越糙）
+  const AI_SEARCH_POW  = 0.26;       // 搜索力度步长
+  const AI_SUBOPT_RATE = 0.55;       // 主动改选次优路线的概率
+  const AI_BLUNDER_RATE= 0.42;       // 严重失误概率：方向大偏 + 力度严重失准 → 多半完全打空
+  const AI_ANGLE_SIGMA = 0.17;       // 常规角度噪声 σ（rad）
+  const AI_POWER_SIGMA = 0.16;       // 常规力度噪声 σ
+
+  const RAIL           = 14;         // 木质挡边厚度（视觉）
+
+  const PHASE = {
+    DEPLOY_PLAYER: "deploy_player",   // 玩家部署
+    DEPLOY_AI:     "deploy_ai",       // AI 部署
+    AIM_PLAYER:    "aim_player",      // 玩家瞄准
+    AI_THINK:      "ai_think",        // AI 思考
+    FLYING:        "sliding",         // 滑行中
+    SNAP:          "snap",            // 99.01% 吸附动画
+    ROUND_BREAK:   "round_break",     // 本局结束间歇
+    MATCH_OVER:    "match_over"
+  };
+
+  /* ============================ 2. 全局状态 ============================ */
+  const A = { x: 0, y: 0, w: 0, h: 0 };      // 桌布区域（CSS 像素，逻辑坐标）
+  let dpr = 1, cssW = 0, cssH = 0;
+
+  const G = {
+    phase: PHASE.DEPLOY_PLAYER,
+    round: 1,
+    score: { player: 0, ai: 0 },
+    turn: "player",
+    cards: { player: null, ai: null },       // [NULL-SAFE] 未部署时为 null
+    thrower: null,                            // 当前投掷方
+    extra: null,                              // { owner, attempts } 额外投掷状态
+    lastCoverage: 0,
+    timers: [],                               // 随状态一起清空的定时器队列
+    tween: null,                              // 吸附动画
+    drag: null,                                // { card, px, py }
+    deployShot: false,                         // 本次滑行是否为部署投掷（带中线挡板）
+    fps: 0,
+    aiPlan: null,
+    running: true
+  };
+
+  /* ============================ 3. 几何工具（覆盖面积） ============================ */
+  function rectPoly(cx, cy, hw, hh, ang) {
+    const c = Math.cos(ang), s = Math.sin(ang);
+    const pts = [[-hw, -hh], [hw, -hh], [hw, hh], [-hw, hh]];
+    const out = [];
+    for (let i = 0; i < 4; i++) {
+      const px = pts[i][0], py = pts[i][1];
+      out.push([cx + px * c - py * s, cy + px * s + py * c]);
+    }
+    return out;
+  }
+  function lineIntersect(p1, p2, a, b) {
+    const d1 = (b[0] - a[0]) * (p1[1] - a[1]) - (b[1] - a[1]) * (p1[0] - a[0]);
+    const d2 = (b[0] - a[0]) * (p2[1] - a[1]) - (b[1] - a[1]) * (p2[0] - a[0]);
+    const den = d1 - d2;
+    const t = Math.abs(den) < 1e-12 ? 0 : d1 / den;
+    return [p1[0] + (p2[0] - p1[0]) * t, p1[1] + (p2[1] - p1[1]) * t];
+  }
+  function clipPolygon(subject, clip) { // Sutherland–Hodgman
+    if (!subject || !clip || subject.length === 0) return [];
+    let output = subject.slice();
+    for (let i = 0; i < clip.length && output.length; i++) {
+      const a = clip[i], b = clip[(i + 1) % clip.length];
+      const input = output; output = [];
+      const side = (p) => (b[0] - a[0]) * (p[1] - a[1]) - (b[1] - a[1]) * (p[0] - a[0]);
+      for (let j = 0; j < input.length; j++) {
+        const cur = input[j];
+        const prev = input[(j + input.length - 1) % input.length];
+        const sc = side(cur), sp = side(prev);
+        if (sc >= 0) {
+          if (sp < 0) output.push(lineIntersect(prev, cur, a, b));
+          output.push(cur);
+        } else if (sp >= 0) {
+          output.push(lineIntersect(prev, cur, a, b));
+        }
+      }
+    }
+    return output;
+  }
+  function polyArea(p) {
+    if (!p || p.length < 3) return 0;
+    let a = 0;
+    for (let i = 0; i < p.length; i++) {
+      const q = p[(i + 1) % p.length];
+      a += p[i][0] * q[1] - q[0] * p[i][1];
+    }
+    return Math.abs(a) / 2;
+  }
+  // 覆盖率 = 重叠面积 / 被覆盖（下方）卡牌的完整面积
+  function coverageOf(top, bottom) {
+    if (!top || !bottom) return 0; // [NULL-SAFE]
+    const inter = clipPolygon(
+      rectPoly(top.x, top.y, top.hw, top.hh, top.angle),
+      rectPoly(bottom.x, bottom.y, bottom.hw, bottom.hh, bottom.angle)
+    );
+    if (!inter.length) return 0;
+    const base = (bottom.hw * 2) * (bottom.hh * 2);
+    return base > 0 ? Math.min(1, polyArea(inter) / base) : 0;
+  }
+  // 卡牌外接半尺寸（旋转后）
+  function extents(c) {
+    if (!c) return { ex: 0, ey: 0 }; // [NULL-SAFE]
+    const ca = Math.abs(Math.cos(c.angle)), sa = Math.abs(Math.sin(c.angle));
+    return { ex: c.hw * ca + c.hh * sa, ey: c.hw * sa + c.hh * ca };
+  }
+
+  /* ============================ 4. 卡牌 ============================ */
+  function createCard(owner) {
+    return {
+      owner: owner,
+      x: 0, y: 0, vx: 0, vy: 0,
+      angle: 0, va: 0,
+      hw: G.cardHW, hh: G.cardHH,
+      settled: true,      // 注意：没有 active 字段，避免读到 null 对象的属性
+      settleT: 0,
+      flightT: 0,
+      visible: true,
+      wobble: 0,          // 接触后的纸张微颤（视觉，衰减）
+      wobbleAng: 0
+    };
+  }
+  function getCard(owner) {
+    if (owner !== "player" && owner !== "ai") return null; // [NULL-SAFE]
+    const c = G.cards ? G.cards[owner] : null;
+    return c || null;
+  }
+  function getOtherCard(owner) { return getCard(owner === "player" ? "ai" : "player"); }
+
+  /* ============================ 5. 物理系统：桌面滑行 ============================ */
+  function physicsStep(c, dt, opts) {
+    if (!c) return false;                       // [NULL-SAFE]
+    opts = opts || {};
+    const deployLimit = !!opts.deployLimit;
+
+    // --- 桌面滑行：无下坠，只有摩擦 ---
+    const sp = Math.hypot(c.vx, c.vy);
+    if (sp > 0.0001) {
+      // 库仑摩擦：速度大小按恒定减速度下降，方向与速度相反
+      const next = Math.max(0, sp - TABLE_FRICTION * dt);
+      const k = next / sp;
+      c.vx *= k; c.vy *= k;
+      // 桌布绒毛的极轻阻力，只用于柔化末段
+      const lin = Math.max(0, 1 - FELT_DRAG * dt);
+      c.vx *= lin; c.vy *= lin;
+    } else {
+      c.vx = 0; c.vy = 0;
+    }
+    c.x += c.vx * dt;
+    c.y += c.vy * dt;
+
+    // --- 旋转：独立于轨迹的视觉系统，幅度小、衰减快 ---
+    c.angle += c.va * dt;
+    c.va *= Math.max(0, 1 - SPIN_DECAY * dt);
+    if (Math.abs(c.va) < 0.02) c.va = 0;
+
+    // --- 挡边（阻尼很大，绝不弹球化） ---
+    const e = extents(c);
+    let bounced = false;
+    const L = A.x, R = A.x + A.w, T = A.y, B = A.y + A.h;
+    if (c.x - e.ex < L) { c.x = L + e.ex; c.vx = Math.abs(c.vx) * RAIL_REST; c.vy *= RAIL_TANGENT; bounced = true; }
+    if (c.x + e.ex > R) { c.x = R - e.ex; c.vx = -Math.abs(c.vx) * RAIL_REST; c.vy *= RAIL_TANGENT; bounced = true; }
+    if (c.y - e.ey < T) { c.y = T + e.ey; c.vy = Math.abs(c.vy) * RAIL_REST; c.vx *= RAIL_TANGENT; bounced = true; }
+    if (c.y + e.ey > B) { c.y = B - e.ey; c.vy = -Math.abs(c.vy) * RAIL_REST; c.vx *= RAIL_TANGENT; bounced = true; }
+
+    // --- 部署阶段的中线挡板 ---
+    if (deployLimit) {
+      const mid = G.midLine;
+      if (c.owner === "player" && c.x + e.ex > mid) {
+        c.x = mid - e.ex; c.vx = -Math.abs(c.vx) * RAIL_REST; bounced = true;
+      } else if (c.owner === "ai" && c.x - e.ex < mid) {
+        c.x = mid + e.ex; c.vx = Math.abs(c.vx) * RAIL_REST; bounced = true;
+      }
+    }
+    // 撞边只带来极小的旋转扰动（克制）
+    if (bounced) c.va += (Math.random() - 0.5) * 0.6;
+
+    // --- 停止判定 ---
+    const sp2 = Math.hypot(c.vx, c.vy);
+    if (sp2 < STOP_SPEED) {
+      c.settleT += dt;
+      c.vx *= 0.78; c.vy *= 0.78;
+    } else if (c.settleT > 0) {
+      c.settleT = Math.max(0, c.settleT - dt * 2);
+    }
+    c.flightT += dt;
+
+    // --- 纸张微颤（视觉，快速消失） ---
+    if (c.wobble > 0) {
+      const decay = Math.pow(0.02, dt);
+      c.wobble *= decay;
+      c.wobbleAng *= decay;
+      if (c.wobble < 0.01) { c.wobble = 0; c.wobbleAng = 0; }
+    }
+    return c.settleT >= SETTLE_TIME || c.flightT > MAX_FLIGHT;
+  }
+
+  // 离屏模拟：仅供 AI 与瞄准辅助线使用（不触碰真实卡牌）
+  function simulateThrow(start, vx, vy, maxT) {
+    if (!start) return null; // [NULL-SAFE]
+    const c = {
+      owner: start.owner, x: start.x, y: start.y, vx: vx, vy: vy,
+      angle: start.angle || 0, va: 0, hw: start.hw, hh: start.hh,
+      settleT: 0, flightT: 0, wobble: 0, wobbleAng: 0
+    };
+    const dt = 1 / 60;
+    let t = 0, bounced = 0;
+    const limit = maxT || 6;
+    while (t < limit) {
+      const bx = c.vx, by = c.vy;
+      const done = physicsStep(c, dt, { deployLimit: false });
+      if ((bx !== 0 && Math.sign(c.vx) !== Math.sign(bx)) ||
+          (by !== 0 && Math.sign(c.vy) !== Math.sign(by))) bounced++;
+      t += dt;
+      if (done) break;
+    }
+    return { x: c.x, y: c.y, angle: c.angle, t: t, bounced: bounced };
+  }
+
+  /* ============================ 6. 布局 / 尺寸 ============================ */
+  function layout() {
+    const rect = canvas.getBoundingClientRect();
+    cssW = Math.max(1, rect.width || canvas.clientWidth || 800);
+    cssH = Math.max(1, rect.height || canvas.clientHeight || 600);
+    dpr = Math.min(2.5, window.devicePixelRatio || 1);
+    canvas.width = Math.round(cssW * dpr);
+    canvas.height = Math.round(cssH * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+    const padX = Math.max(30, cssW * 0.04);
+    const padTop = 92, padBottom = 40;
+    A.x = padX; A.y = padTop;
+    A.w = Math.max(160, cssW - padX * 2);
+    A.h = Math.max(160, cssH - padTop - padBottom);
+    G.midLine = A.x + A.w / 2;
+
+    // 卡牌响应式尺寸
+    let hh = Math.min(A.h * 0.17, A.w * 0.075);
+    hh = Math.max(26, hh);
+    const newHW = hh * CARD_RATIO, newHH = hh;
+
+    ["player", "ai"].forEach(function (owner) {
+      const c = getCard(owner);
+      if (!c) return;                    // [NULL-SAFE] 未部署时跳过
+      const rx = (c.x - A.x) / Math.max(1, A.w);
+      const ry = (c.y - A.y) / Math.max(1, A.h);
+      c.hw = newHW; c.hh = newHH;
+      c.x = A.x + rx * A.w; c.y = A.y + ry * A.h;
+      clampInside(c);
+    });
+    G.cardHW = newHW; G.cardHH = newHH;
+  }
+  function clampInside(c) {
+    if (!c) return; // [NULL-SAFE]
+    const e = extents(c);
+    c.x = Math.min(Math.max(c.x, A.x + e.ex), A.x + A.w - e.ex);
+    c.y = Math.min(Math.max(c.y, A.y + e.ey), A.y + A.h - e.ey);
+  }
+
+  /* ============================ 7. 定时器队列（替代裸 setTimeout） ============================ */
+  function after(sec, fn) {
+    if (typeof fn !== "function") return; // [NULL-SAFE]
+    G.timers.push({ t: Math.max(0, sec), fn: fn });
+  }
+  function clearTimers() { G.timers.length = 0; }
+  function updateTimers(dt) {
+    if (!G.timers.length) return;
+    const due = [];
+    for (let i = G.timers.length - 1; i >= 0; i--) {
+      const tm = G.timers[i];
+      if (!tm) { G.timers.splice(i, 1); continue; }
+      tm.t -= dt;
+      if (tm.t <= 0) { due.push(tm.fn); G.timers.splice(i, 1); }
+    }
+    for (let i = due.length - 1; i >= 0; i--) {
+      const fn = due[i];
+      try { fn(); } catch (err) { reportError(err, "timer"); }  // [NULL-SAFE]
+    }
+  }
+
+  /* ============================ 8. 流程控制 ============================ */
+  function resetMatch() {
+    clearTimers();
+    if (bannerTimer) { clearTimeout(bannerTimer); bannerTimer = null; }
+    if (dom.banner) dom.banner.className = "";
+    G.round = 1;
+    G.score.player = 0; G.score.ai = 0;
+    G.turn = "player";
+    G.extra = null; G.tween = null; G.drag = null; G.aiPlan = null;
+    G.lastCoverage = 0; G.thrower = null; G.deployShot = false;
+    if (dom.overlay) dom.overlay.className = "";
+    resetRound();
+  }
+
+  function resetRound() {
+    clearTimers();
+    G.cards.player = createCard("player");
+    G.cards.ai = null;                 // [NULL-SAFE] AI 尚未部署 → 明确为 null
+    G.thrower = null;
+    G.extra = null;
+    G.tween = null;
+    G.drag = null;
+    G.deployShot = false;
+    G.aiPlan = null;
+    G.lastCoverage = 0;
+    G.turn = "player";
+    const p = getCard("player");
+    if (p) {                            // [NULL-SAFE]
+      p.x = A.x + A.w * 0.25;
+      p.y = A.y + A.h * 0.5;
+      p.angle = 0; p.settled = true;
+      clampInside(p);
+    }
+    G.phase = PHASE.DEPLOY_PLAYER;
+    setHint("部署阶段：按住你的牌，向后拖拽把它推进左侧区域");
+    updateHud();
+  }
+
+  function beginTurn(owner) {
+    if (owner !== "player" && owner !== "ai") return; // [NULL-SAFE]
+    G.turn = owner;
+    G.thrower = null;
+    if (owner === "player") {
+      G.phase = PHASE.AIM_PLAYER;
+      const extra = G.extra;
+      if (extra && extra.owner === "player") {
+        setHint("额外投掷：你的牌压住了对方 —— 必须先脱离对方的覆盖区域");
+      } else {
+        setHint("你的回合：按住卡牌向后拖拽，松手推出");
+      }
+    } else {
+      G.phase = PHASE.AI_THINK;
+      setHint("AI 思考中…");
+      after(0.7 + Math.random() * 0.5, function () { aiTakeShot(); });
+    }
+    updateHud();
+  }
+
+  function launch(owner, vx, vy) {
+    const c = getCard(owner);
+    if (!c) { beginTurn(G.turn === "player" ? "ai" : "player"); return; } // [NULL-SAFE]
+    c.vx = vx; c.vy = vy;
+    c.settled = false; c.settleT = 0; c.flightT = 0;
+    // 克制的旋转：1.2 ~ 3.0 rad/s，随滑行方向轻微带转
+    c.va = (Math.random() < 0.5 ? -1 : 1) * (SPIN_MIN + Math.random() * SPIN_RANGE);
+    G.thrower = owner;
+    G.phase = PHASE.FLYING;
+    setHint("");
+  }
+
+  /* ============================ 9. 覆盖判定（规则系统） ============================ */
+  function resolveThrow() {
+    const thrower = G.thrower;
+    const top = getCard(thrower);          // 本次投掷的牌视为"上方"
+    const bottom = getOtherCard(thrower);  // 对方牌视为"下方"（分母）
+    G.phase = PHASE.ROUND_BREAK;
+
+    if (!top || !bottom) {                 // [NULL-SAFE] 缺牌则安全换手
+      after(0.2, function () { beginTurn(thrower === "player" ? "ai" : "player"); });
+      return;
+    }
+
+    const cov = coverageOf(top, bottom);
+    G.lastCoverage = cov;
+    top.settled = true;
+
+    // 视觉：接触后的极小滑动 —— 不超过卡牌尺寸的 0.5%
+    if (cov > 0 && cov < PERFECT) {
+      const unit = Math.min(top.hw, top.hh) * 2;          // 卡牌短边尺寸
+      const mag = Math.min(unit * SLIDE_MAX, cov * unit * SLIDE_MAX + 0.01);
+      const dir = Math.random() * Math.PI * 2;
+      top.x += Math.cos(dir) * mag;
+      top.y += Math.sin(dir) * mag;
+      clampInside(top);
+      top.wobble = mag;
+      top.wobbleAng = (Math.random() - 0.5) * 0.03;       // 极轻微的角度调整
+    }
+
+    // ---- 处于"必须脱离"状态时：本次投掷不得用于继续覆盖（文档 §19 / §21）----
+    // 额外投掷的唯一任务是脱离当前覆盖关系，因此覆盖率再高也不判胜。
+    const mustEscape = !!(G.extra && G.extra.owner === thrower);
+
+    // ---- 99.01%+ → 吸附 100% → 直接赢下整场（优先级最高） ----
+    if (cov >= PERFECT && !mustEscape) {
+      banner("完美覆盖 100%！", "great");
+      startSnap(top, bottom, function () {
+        endMatch(thrower, true);
+      });
+      return;
+    }
+    // ---- 67%～99% → 赢得本局 ----
+    if (cov >= WIN_COVER && !mustEscape) {
+      const gap = (PERFECT - cov) * 100;
+      const nearTxt = cov >= NEAR_MISS ? " · 距完美覆盖仅 " + gap.toFixed(1) + "%" : "";
+      banner("覆盖 " + Math.round(cov * 100) + "% · 本局胜利" + nearTxt, "good");
+      after(1.1, function () { winRound(thrower); });
+      return;
+    }
+    // ---- 0%～67% ----
+    if (cov > 0) {
+      const extra = G.extra;
+      if (mustEscape) {
+        // 额外投掷却仍压在对方身上（含"蹭挡边绕回来"）：这次覆盖不作数，必须重扔
+        extra.attempts += 1;
+        if (extra.attempts >= MAX_EXTRA) {
+          G.extra = null;
+          banner("仍在覆盖中 · 脱离失败，换手", "");
+          after(1.0, function () { beginTurn(thrower === "player" ? "ai" : "player"); });
+        } else {
+          banner("仍在覆盖中 · 这次不算，必须先脱离", "");
+          after(1.0, function () { beginTurn(thrower); }); // 仍是自己投
+        }
+      } else {
+        G.extra = { owner: thrower, attempts: 0 };
+        banner("覆盖 " + Math.round(cov * 100) + "% · 获得额外投掷（需先脱离）", "");
+        after(1.1, function () { beginTurn(thrower); });
+      }
+      return;
+    }
+    // ---- 0% ----
+    if (G.extra && G.extra.owner === thrower) {
+      G.extra = null; // 脱离成功，恢复正常轮流
+      banner("脱离成功 · 恢复轮流投掷", "");
+      after(0.9, function () { beginTurn(thrower === "player" ? "ai" : "player"); });
+      return;
+    }
+    after(0.35, function () { beginTurn(thrower === "player" ? "ai" : "player"); });
+  }
+
+  function startSnap(top, bottom, done) {
+    if (!top || !bottom) { if (done) done(); return; } // [NULL-SAFE]
+    G.phase = PHASE.SNAP;
+    G.tween = {
+      card: top,
+      fx: top.x, fy: top.y, fa: top.angle,
+      tx: bottom.x, ty: bottom.y,
+      ta: bottom.angle,          // 桌面上无需"躺平"，直接对齐被压牌的角度
+      t: 0, dur: 0.55, done: done
+    };
+  }
+  function updateTween(dt) {
+    const tw = G.tween;
+    if (!tw) return;                        // [NULL-SAFE]
+    const c = tw.card;
+    if (!c) { G.tween = null; return; }     // [NULL-SAFE] 卡牌已被重置
+    tw.t += dt;
+    const k = Math.min(1, tw.t / tw.dur);
+    const e = 1 - Math.pow(1 - k, 3);
+    c.x = tw.fx + (tw.tx - tw.fx) * e;
+    c.y = tw.fy + (tw.ty - tw.fy) * e;
+    c.angle = tw.fa + (tw.ta - tw.fa) * e;
+    c.settled = true;
+    if (k >= 1) {
+      G.tween = null;
+      const fn = tw.done;
+      if (typeof fn === "function") { try { fn(); } catch (err) { reportError(err, "tween"); } }
+    }
+  }
+
+  function winRound(winner) {
+    if (winner === "player" || winner === "ai") G.score[winner] += 1; // [NULL-SAFE]
+    updateHud();
+    const need = 2;
+    if (G.score.player >= need || G.score.ai >= need || G.round >= 3) {
+      endMatch(G.score.player >= need ? "player" : (G.score.ai >= need ? "ai" : winner), false);
+      return;
+    }
+    G.round += 1;
+    updateHud();
+    banner("第 " + G.round + " 局开始", "");
+    after(0.9, function () { resetRound(); });
+  }
+
+  function endMatch(winner, perfect) {
+    G.phase = PHASE.MATCH_OVER;
+    clearTimers();
+    G.drag = null;
+    if (dom.overlay && dom.ovTitle && dom.ovDesc) {
+      dom.ovTitle.textContent = winner === "player" ? "你赢了" : "AI 赢了";
+      dom.ovDesc.textContent = perfect
+        ? "达成 100% 完美覆盖，直接赢下整场比赛（" + G.score.player + " : " + G.score.ai + "）"
+        : "三局两胜 · 最终比分 " + G.score.player + " : " + G.score.ai;
+      dom.overlay.className = "show";
+    }
+    setHint("");
+  }
+
+  /* ============================ 10. AI ============================ */
+  function gauss() {
+    let u = 0, v = 0;
+    while (u === 0) u = Math.random();
+    while (v === 0) v = Math.random();
+    return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
+  }
+
+  function aiTakeShot() {
+    const me = getCard("ai");
+    const foe = getCard("player");
+    if (!me || !foe) { beginTurn("player"); return; }   // [NULL-SAFE]
+    if (G.phase !== PHASE.AI_THINK) return;             // [NULL-SAFE] 状态已变则放弃
+
+    // AI 的目标：正常情况下尽量覆盖；额外投掷（未脱离）时则必须拉开距离
+    const mustEscape = !!(G.extra && G.extra.owner === "ai");
+
+    let best = null, second = null;
+    const angles = [];
+    const base = Math.atan2(foe.y - me.y, foe.x - me.x);
+    // v0.5：采样更粗，AI 眼里的"最优解"本身就相当糙
+    for (let a = -Math.PI + 0.25; a < Math.PI - 0.2; a += AI_SEARCH_ANG) angles.push(a);
+    for (let i = 0; i < 3; i++) angles.push(base + (Math.random() - 0.5) * 1.2);
+
+    // 桌面滑行是直线，预测非常可靠；旋转期望为 0，故用当前角度估算覆盖
+    const predAngle = me.angle;
+
+    for (let i = 0; i < angles.length; i++) {
+      for (let p = 0.25; p <= 1.0001; p += AI_SEARCH_POW) {
+        const sp = MIN_SPEED + (MAX_SPEED - MIN_SPEED) * p;
+        const vx = Math.cos(angles[i]) * sp;
+        const vy = Math.sin(angles[i]) * sp;
+        const sim = simulateThrow(me, vx, vy, 6);
+        if (!sim) continue;                             // [NULL-SAFE]
+        const pred = coverageOf(
+          { x: sim.x, y: sim.y, hw: me.hw, hh: me.hh, angle: predAngle },
+          { x: foe.x, y: foe.y, hw: foe.hw, hh: foe.hh, angle: foe.angle }
+        );
+        const dist = Math.hypot(sim.x - foe.x, sim.y - foe.y);
+        let score;
+        if (mustEscape) score = -pred * 1000 - Math.max(0, 260 - dist) * 0.05;
+        else score = pred * 1000 - dist * 0.05 - (sim.bounced > 1 ? 40 : 0);
+        const cand = { ang: angles[i], p: p, score: score, cov: pred };
+        if (!best || score > best.score) { second = best; best = cand; }
+        else if (!second || score > second.score) second = cand;
+      }
+    }
+    if (!best) { beginTurn("player"); return; }         // [NULL-SAFE]
+
+    // v0.5 休闲 AI 犯错模型：
+    //   A. 55% 概率主动改选次优路线
+    //   B. 42% 概率严重失误（方向大偏 + 力度严重不足/过头）→ 多半完全打空
+    //   C. 其余情况也带不小的常规噪声
+    // 脱离状态（必须拉开距离）不走严重失误，避免 AI 卡在覆盖里出不来。
+    let use = best;
+    if (!mustEscape && second && Math.random() < AI_SUBOPT_RATE) use = second;
+
+    let ang = use.ang + gauss() * AI_ANGLE_SIGMA;
+    let pw  = use.p * (1 + gauss() * AI_POWER_SIGMA);
+
+    if (!mustEscape && Math.random() < AI_BLUNDER_RATE) {
+      // 严重失误：方向显著偏离（0.45 ~ 1.40 rad），力度明显不足或过头
+      ang += (Math.random() < 0.5 ? -1 : 1) * (0.45 + Math.random() * 0.95);
+      pw  *= (Math.random() < 0.5)
+           ? (0.42 + Math.random() * 0.38)   // 力度不足：没推到位
+           : (1.25 + Math.random() * 0.35);  // 力度过头：滑过头了
+    }
+
+    pw = Math.min(1, Math.max(0.2, pw));
+    const speed = MIN_SPEED + (MAX_SPEED - MIN_SPEED) * pw;
+
+    G.aiPlan = null;
+    launch("ai", Math.cos(ang) * speed, Math.sin(ang) * speed);
+  }
+
+  /* ============================ 11. 输入 ============================ */
+  function pointerPos(e) {
+    const r = canvas.getBoundingClientRect();
+    const sx = r.width ? cssW / r.width : 1;
+    const sy = r.height ? cssH / r.height : 1;
+    return { x: (e.clientX - r.left) * sx, y: (e.clientY - r.top) * sy };
+  }
+  function hitCard(c, px, py) {
+    if (!c) return false;                               // [NULL-SAFE]
+    const dx = px - c.x, dy = py - c.y;
+    const ca = Math.cos(-c.angle), sa = Math.sin(-c.angle);
+    const lx = dx * ca - dy * sa, ly = dx * sa + dy * ca;
+    return Math.abs(lx) <= c.hw + 10 && Math.abs(ly) <= c.hh + 10;
+  }
+  function canGrab(owner) {
+    if (G.phase === PHASE.DEPLOY_PLAYER) return owner === "player";
+    if (G.phase === PHASE.AIM_PLAYER) return owner === "player";
+    return false;
+  }
+  function onDown(e) {
+    try {
+      if (!G.running) return;
+      if (G.phase === PHASE.MATCH_OVER) return;
+      const p = pointerPos(e);
+      const c = getCard("player");
+      if (!c || !c.visible) return;                     // [NULL-SAFE]
+      if (!hitCard(c, p.x, p.y)) return;
+      if (!canGrab("player")) return;
+      G.drag = { card: c, px: p.x, py: p.y };
+      if (canvas.setPointerCapture && e.pointerId !== undefined) {
+        try { canvas.setPointerCapture(e.pointerId); } catch (_) {}
+      }
+    } catch (err) { reportError(err, "pointerdown"); }
+  }
+  function onMove(e) {
+    try {
+      const d = G.drag;
+      if (!d) return;                                   // [NULL-SAFE]
+      const p = pointerPos(e);
+      d.px = p.x; d.py = p.y;
+    } catch (err) { reportError(err, "pointermove"); }
+  }
+  function onUp(e) {
+    try {
+      const d = G.drag;
+      G.drag = null;
+      if (!d) return;                                   // [NULL-SAFE]
+      const c = d.card;
+      if (!c) return;                                   // [NULL-SAFE]
+      // 拖拽向量 = 从指针指向卡牌（反方向拖拽 → 朝拖拽反向滑出）
+      let dx = c.x - d.px, dy = c.y - d.py;
+      let len = Math.hypot(dx, dy);
+      if (len < 6) { setHint("拖得太短了 —— 按住卡牌向后拉再松手"); return; }
+      const maxDrag = Math.min(A.w, A.h) * 0.42;
+      const power = Math.min(1, len / maxDrag);
+      const speed = MIN_SPEED + (MAX_SPEED - MIN_SPEED) * power;
+      const vx = dx / len * speed, vy = dy / len * speed;
+      if (G.phase === PHASE.DEPLOY_PLAYER) {
+        G.phase = PHASE.FLYING;
+        G.thrower = "player";
+        G.deployShot = true;   // 部署投掷：带中线挡板，不判覆盖
+        c.vx = vx; c.vy = vy;
+        c.settled = false; c.settleT = 0; c.flightT = 0;
+        c.va = (Math.random() < 0.5 ? -1 : 1) * (SPIN_MIN * 0.7 + Math.random() * SPIN_RANGE * 0.7);
+        setHint("");
+      } else if (G.phase === PHASE.AIM_PLAYER) {
+        G.deployShot = false;
+        launch("player", vx, vy);
+      }
+    } catch (err) { reportError(err, "pointerup"); }
+  }
+
+  window.addEventListener("keydown", function (e) {
+    try {
+      if (e.key === "r" || e.key === "R") { resetMatch(); }
+      else if (e.key === "d" || e.key === "D") {
+        if (dom.debug) dom.debug.className = dom.debug.className === "show" ? "" : "show";
+      }
+    } catch (err) { reportError(err, "keydown"); }
+  });
+  if (dom.ovBtn) {
+    dom.ovBtn.addEventListener("click", function () { try { resetMatch(); } catch (err) { reportError(err, "restart"); } });
+  }
+
+  canvas.addEventListener("pointerdown", onDown);
+  canvas.addEventListener("pointermove", onMove);
+  canvas.addEventListener("pointerup", onUp);
+  canvas.addEventListener("pointercancel", function () { G.drag = null; });
+  canvas.addEventListener("contextmenu", function (e) { e.preventDefault(); });
+  window.addEventListener("resize", function () { try { layout(); } catch (err) { reportError(err, "resize"); } });
+
+  /* ============================ 12. UI 辅助 ============================ */
+  function setHint(t) { if (dom.hint) dom.hint.textContent = t || ""; }
+  let bannerTimer = null;
+  function banner(text, cls) {
+    if (!dom.banner) return;                            // [NULL-SAFE]
+    dom.banner.textContent = text;
+    dom.banner.className = "show" + (cls ? " " + cls : "");
+    if (bannerTimer) { clearTimeout(bannerTimer); bannerTimer = null; }
+    bannerTimer = setTimeout(function () {
+      bannerTimer = null;
+      if (dom.banner) dom.banner.className = "";
+    }, 1500);
+  }
+  function updateHud() {
+    if (dom.roundInfo) {
+      const deploying = (G.phase === PHASE.DEPLOY_PLAYER || G.phase === PHASE.DEPLOY_AI);
+      dom.roundInfo.textContent = "第 " + G.round + " 局" + (deploying ? " · 部署" : " · 桌面");
+    }
+    paintPips(dom.pipsPlayer, G.score.player, "player");
+    paintPips(dom.pipsAi, G.score.ai, "ai");
+  }
+  function paintPips(box, n, who) {
+    if (!box) return;                                   // [NULL-SAFE]
+    const kids = box.children ? box.children : [];
+    for (let i = 0; i < kids.length; i++) {
+      const el = kids[i];
+      if (!el) continue;
+      el.className = "pip" + (i < n ? " on " + who : "");
+    }
+  }
+
+  /* ============================ 13. 渲染：俯视牌桌 ============================ */
+  function roundRectPath(x, y, w, h, r) {
+    const rr = Math.max(0, Math.min(r, w / 2, h / 2));
+    ctx.beginPath();
+    ctx.moveTo(x + rr, y);
+    ctx.arcTo(x + w, y, x + w, y + h, rr);
+    ctx.arcTo(x + w, y + h, x, y + h, rr);
+    ctx.arcTo(x, y + h, x, y, rr);
+    ctx.arcTo(x, y, x + w, y, rr);
+    ctx.closePath();
+  }
+
+  function drawTable() {
+    // ---- 木质挡边 ----
+    ctx.save();
+    const wood = ctx.createLinearGradient(0, A.y - RAIL, 0, A.y + A.h + RAIL);
+    wood.addColorStop(0, "#a9825c");
+    wood.addColorStop(0.5, "#8d6a48");
+    wood.addColorStop(1, "#79583a");
+    ctx.fillStyle = wood;
+    roundRectPath(A.x - RAIL, A.y - RAIL, A.w + RAIL * 2, A.h + RAIL * 2, 20);
+    ctx.fill();
+    ctx.strokeStyle = "rgba(255,255,255,0.10)";
+    ctx.lineWidth = 1.5;
+    roundRectPath(A.x - RAIL + 1.5, A.y - RAIL + 1.5, A.w + RAIL * 2 - 3, A.h + RAIL * 2 - 3, 18);
+    ctx.stroke();
+    ctx.restore();
+
+    // ---- 桌布 ----
+    const felt = ctx.createLinearGradient(0, A.y, 0, A.y + A.h);
+    felt.addColorStop(0, "#3f8168");
+    felt.addColorStop(1, "#2e6a53");
+    ctx.fillStyle = felt;
+    roundRectPath(A.x, A.y, A.w, A.h, 10);
+    ctx.fill();
+
+    // ---- 挡边投在桌布上的阴影（强调"这是一张桌子"） ----
+    ctx.save();
+    roundRectPath(A.x, A.y, A.w, A.h, 10);
+    ctx.clip();
+    const sh = ctx.createLinearGradient(0, A.y, 0, A.y + 18);
+    sh.addColorStop(0, "rgba(0,0,0,0.30)");
+    sh.addColorStop(1, "rgba(0,0,0,0)");
+    ctx.fillStyle = sh;
+    ctx.fillRect(A.x, A.y, A.w, 18);
+
+    // ---- 部署阶段：中线挡板 ----
+    const deploying = (G.phase === PHASE.DEPLOY_PLAYER || G.phase === PHASE.DEPLOY_AI ||
+                      (G.phase === PHASE.FLYING && G.deployShot));
+    if (deploying) {
+      ctx.fillStyle = "rgba(255,255,255,0.045)";
+      ctx.fillRect(A.x, A.y, G.midLine - A.x, A.h);
+      // 挡板本体
+      const bw = 8;
+      const bg = ctx.createLinearGradient(G.midLine - bw, 0, G.midLine + bw, 0);
+      bg.addColorStop(0, "#b08e66");
+      bg.addColorStop(0.5, "#d8bd97");
+      bg.addColorStop(1, "#8d6a48");
+      ctx.fillStyle = bg;
+      ctx.fillRect(G.midLine - bw, A.y, bw * 2, A.h);
+      ctx.fillStyle = "rgba(0,0,0,0.22)";
+      ctx.fillRect(G.midLine + bw - 2, A.y, 2, A.h);
+    }
+    ctx.restore();
+  }
+
+  function drawCard(c, highlight, elevated) {
+    if (!c || !c.visible) return;                       // [NULL-SAFE]
+    const w = c.hw * 2, h = c.hh * 2;
+    const r = Math.max(3, c.hw * 0.16);
+    const ang = c.angle + (c.wobbleAng || 0);
+
+    ctx.save();
+    ctx.translate(c.x, c.y);
+    ctx.rotate(ang);
+
+    // 桌面投影：elevated（压在上面的牌）投影更明显
+    ctx.save();
+    ctx.shadowColor = elevated ? "rgba(0,0,0,0.45)" : "rgba(0,0,0,0.30)";
+    ctx.shadowBlur = elevated ? c.hh * 0.85 : c.hh * 0.45;
+    ctx.shadowOffsetY = elevated ? c.hh * 0.30 : c.hh * 0.14;
+    ctx.shadowOffsetX = elevated ? c.hw * 0.14 : c.hw * 0.07;
+    ctx.fillStyle = "#fbf8f1";
+    roundRectPath(-c.hw, -c.hh, w, h, r);
+    ctx.fill();
+    ctx.restore();
+
+    // 卡面
+    ctx.fillStyle = "#fdfbf5";
+    roundRectPath(-c.hw, -c.hh, w, h, r);
+    ctx.fill();
+    ctx.lineWidth = highlight ? 3.5 : 1.4;
+    ctx.strokeStyle = highlight ? "#ffd166" : "rgba(90,84,72,0.5)";
+    ctx.stroke();
+
+    // 极细的"厚度"高光，暗示平躺
+    ctx.save();
+    roundRectPath(-c.hw, -c.hh, w, h, r);
+    ctx.clip();
+    ctx.strokeStyle = "rgba(255,255,255,0.85)";
+    ctx.lineWidth = 1.2;
+    roundRectPath(-c.hw + 1, -c.hh + 1, w - 2, h - 2, r);
+    ctx.stroke();
+    ctx.restore();
+
+    const red = (c.owner === "player");
+    ctx.fillStyle = red ? "#c0392b" : "#26262b";
+    ctx.textAlign = "center"; ctx.textBaseline = "middle";
+
+    const fs = Math.max(9, c.hh * 0.34);
+    ctx.font = "700 " + fs.toFixed(1) + "px Georgia, 'Times New Roman', serif";
+    ctx.save();
+    ctx.translate(-c.hw + c.hw * 0.30, -c.hh + c.hh * 0.26);
+    ctx.fillText(red ? "A" : "K", 0, 0);
+    ctx.font = "700 " + (fs * 0.8).toFixed(1) + "px serif";
+    ctx.fillText(red ? "♥" : "♠", 0, fs * 0.9);
+    ctx.restore();
+    ctx.save();
+    ctx.translate(c.hw - c.hw * 0.30, c.hh - c.hh * 0.26);
+    ctx.rotate(Math.PI);
+    ctx.font = "700 " + fs.toFixed(1) + "px Georgia, serif";
+    ctx.fillText(red ? "A" : "K", 0, 0);
+    ctx.font = "700 " + (fs * 0.8).toFixed(1) + "px serif";
+    ctx.fillText(red ? "♥" : "♠", 0, fs * 0.9);
+    ctx.restore();
+    ctx.globalAlpha = 0.92;
+    ctx.font = "700 " + (c.hh * 0.72).toFixed(1) + "px serif";
+    ctx.fillText(red ? "♥" : "♠", 0, c.hh * 0.04);
+    ctx.globalAlpha = 1;
+    ctx.restore();
+
+    if (highlight) { // 可操作提示环
+      ctx.save();
+      ctx.strokeStyle = "rgba(255,209,102,0.5)";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(c.x, c.y, Math.max(c.hw, c.hh) * 1.30, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+    }
+  }
+
+  function trajectoryPoints(c, vx, vy, dur) {
+    const ghost = {
+      owner: c.owner, x: c.x, y: c.y, vx: vx, vy: vy, angle: c.angle, va: 0,
+      hw: c.hw, hh: c.hh, settleT: 0, flightT: 0, wobble: 0, wobbleAng: 0
+    };
+    const pts = [];
+    const dt = 1 / 60;
+    let t = 0;
+    while (t < dur) {
+      physicsStep(ghost, dt, { deployLimit: false });
+      t += dt;
+      if (pts.length === 0 || Math.hypot(ghost.x - pts[pts.length - 1].x, ghost.y - pts[pts.length - 1].y) > 7) {
+        pts.push({ x: ghost.x, y: ghost.y });
+      }
+      if (ghost.settleT >= SETTLE_TIME) break;
+    }
+    return pts;
+  }
+
+  function drawAim() {
+    const d = G.drag;
+    if (!d) return;                                     // [NULL-SAFE]
+    const c = d.card;
+    if (!c) return;                                     // [NULL-SAFE]
+    let dx = c.x - d.px, dy = c.y - d.py;
+    let len = Math.hypot(dx, dy);
+    if (len < 1) return;
+    const maxDrag = Math.min(A.w, A.h) * 0.42;
+    const power = Math.min(1, len / maxDrag);
+    const speed = MIN_SPEED + (MAX_SPEED - MIN_SPEED) * power;
+
+    // 拖拽皮筋
+    ctx.save();
+    ctx.strokeStyle = "rgba(255,255,255,0.35)";
+    ctx.lineWidth = 2; ctx.setLineDash([5, 5]);
+    ctx.beginPath(); ctx.moveTo(c.x, c.y); ctx.lineTo(d.px, d.py); ctx.stroke();
+    ctx.setLineDash([]);
+    // 力度环
+    ctx.strokeStyle = "rgba(255,209,102,0.85)"; ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.arc(c.x, c.y, Math.max(c.hw, c.hh) * 1.16, -Math.PI / 2, -Math.PI / 2 + power * Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+
+    // 有限长度预测辅助线（桌面直线滑行，只显示前一段）
+    const pts = trajectoryPoints(c, dx / len * speed, dy / len * speed, 0.55);
+    if (!pts || pts.length < 2) return;
+    ctx.save();
+    for (let i = 1; i < pts.length; i++) {
+      const a0 = 0.55 * (1 - i / pts.length) + 0.12;
+      ctx.fillStyle = "rgba(255,255,255," + a0.toFixed(3) + ")";
+      ctx.beginPath();
+      ctx.arc(pts[i].x, pts[i].y, 3.2 - i * 0.15 > 1.6 ? 3.2 - i * 0.15 : 1.6, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  function render() {
+    ctx.clearRect(0, 0, cssW, cssH);
+    drawTable();
+
+    const thrower = G.thrower;
+    if (thrower === "player" || thrower === "ai") {
+      const bottom = getOtherCard(thrower);   // 先画被压住的牌
+      const top = getCard(thrower);           // 后画本次滑过来的牌（压在上面）
+      if (bottom) drawCard(bottom, false, false); // [NULL-SAFE]
+      if (top) drawCard(top, true, true);          // [NULL-SAFE]
+    } else {
+      // 部署阶段或尚未投掷：固定顺序，AI 牌可能为 null
+      const a = getCard("ai");
+      if (a) drawCard(a, false, false);            // [NULL-SAFE]
+      const p = getCard("player");
+      if (p) drawCard(p, G.phase === PHASE.DEPLOY_PLAYER, false); // [NULL-SAFE]
+    }
+
+    drawAim();
+
+    // 覆盖率小标
+    if (G.lastCoverage > 0 && G.phase !== PHASE.FLYING) {
+      const b = getOtherCard(G.thrower);
+      if (b) {
+        ctx.save();
+        const near = G.lastCoverage >= NEAR_MISS;
+        ctx.font = "600 " + (near ? 13 : 12) + "px system-ui, sans-serif";
+        ctx.fillStyle = near ? "rgba(255,209,102,0.95)" : "rgba(255,255,255,0.75)";
+        ctx.textAlign = "center";
+        ctx.shadowColor = "rgba(0,0,0,0.6)"; ctx.shadowBlur = 4;
+        let txt = "覆盖率 " + (G.lastCoverage * 100).toFixed(1) + "%";
+        if (near && G.lastCoverage < PERFECT) txt += " · 就差一点！";
+        ctx.fillText(txt, b.x, b.y - b.hh - 16);
+        ctx.restore();
+      }
+    }
+  }
+
+  /* ============================ 14. 主循环 ============================ */
+  const FIXED = 1 / 120;
+  let acc = 0, last = 0;
+
+  function update(dt) {
+    updateTimers(dt);
+    updateTween(dt);
+
+    if (G.phase === PHASE.FLYING) {
+      const c = getCard(G.thrower);
+      if (!c) {                                          // [NULL-SAFE]
+        G.phase = PHASE.ROUND_BREAK;
+        after(0.2, function () { beginTurn(G.turn === "player" ? "ai" : "player"); });
+      } else {
+        acc += dt;
+        let guard = 0;
+        let done = false;
+        while (acc >= FIXED && guard < 12) {
+          done = physicsStep(c, FIXED, { deployLimit: !!G.deployShot }) || done;
+          acc -= FIXED; guard++;
+        }
+        if (guard >= 12) acc = 0;
+        if (done) {
+          c.vx = 0; c.vy = 0; c.va = 0;
+          c.settled = true;
+          clampInside(c);
+          if (G.deployShot) {
+            G.deployShot = false;
+            if (c.owner === "player") {
+              // 确保留在左侧部署区
+              const e = extents(c);
+              if (c.x + e.ex > G.midLine) c.x = G.midLine - e.ex;
+              G.phase = PHASE.DEPLOY_AI;
+              setHint("AI 部署中…");
+              after(0.6, function () { aiDeploy(); });
+            } else {
+              after(0.3, function () { beginTurn("player"); });
+            }
+          } else {
+            resolveThrow();
+          }
+        }
+      }
+    } else {
+      acc = 0;
+      ["player", "ai"].forEach(function (owner) {
+        const c = getCard(owner);
+        if (!c) return;                                  // [NULL-SAFE]
+        c.vx = 0; c.vy = 0;
+        if (c.settleT > 0) c.settleT = 0;
+      });
+    }
+  }
+
+  function aiDeploy() {
+    if (getCard("ai")) { beginTurn("player"); return; }   // [NULL-SAFE] 已部署
+    const c = createCard("ai");
+    const e = extents(c);
+    const minX = G.midLine + e.ex + 14;
+    const maxX = A.x + A.w - e.ex - 14;
+    c.x = (maxX > minX) ? minX + Math.random() * (maxX - minX) : G.midLine + A.w * 0.25;
+    c.y = A.y + e.ey + 14 + Math.random() * Math.max(10, A.h - e.ey * 2 - 28);
+    c.angle = 0;
+    c.settled = true;
+    clampInside(c);
+    if (c.x - e.ex < G.midLine) c.x = G.midLine + e.ex;   // 保证不越界
+    G.cards.ai = c;
+    beginTurn("player");
+  }
+
+  function debugText() {
+    const p = getCard("player"), a = getCard("ai");
+    const f = (c) => c ? ("(" + c.x.toFixed(0) + "," + c.y.toFixed(0) + ") a=" + (c.angle * 57.3).toFixed(0) + "° settled=" + c.settled) : "null";
+    return [
+      "phase    : " + G.phase,
+      "round    : " + G.round + "   score " + G.score.player + ":" + G.score.ai,
+      "turn     : " + G.turn + "   thrower " + G.thrower,
+      "player   : " + f(p),
+      "ai       : " + f(a),
+      "extra    : " + (G.extra ? G.extra.owner + " x" + G.extra.attempts : "none"),
+      "coverage : " + (G.lastCoverage * 100).toFixed(2) + "%  (win " + (WIN_COVER * 100) + "%)",
+      "timers   : " + G.timers.length,
+      "fps      : " + (G.fps || 0).toFixed(0)
+    ].join("\n");
+  }
+
+  let rafId = 0;
+  function frame(ts) {
+    if (!G.running) return;
+    rafId = requestAnimationFrame(frame);
+    try {
+      if (!last) last = ts;
+      let dt = (ts - last) / 1000;
+      last = ts;
+      if (!isFinite(dt) || dt < 0) dt = 0;
+      if (dt > 0.1) dt = 0.1;               // 切后台回来时钳制
+      G.fps = G.fps ? G.fps * 0.9 + (1 / Math.max(dt, 0.001)) * 0.1 : 1 / Math.max(dt, 0.001);
+
+      update(dt);
+      render();
+      if (dom.debug && dom.debug.className === "show") dom.debug.textContent = debugText();
+    } catch (err) {
+      cancelAnimationFrame(rafId);
+      G.running = false;
+      reportError(err, "frame");
+    }
+  }
+
+  /* ============================ 15. 启动 ============================ */
+  // 调试钩子：控制台可查看 __FLYCARD.G.phase / G.cards 等实时状态
+  try { window.__FLYCARD = { G: G, PHASE: PHASE, A: A, coverageOf: coverageOf }; } catch (_) {}
+
+  try {
+    layout();
+    resetMatch();
+    requestAnimationFrame(frame);
+  } catch (err) {
+    reportError(err, "boot");
+  }
+})();
+</script>
+</body>
+</html>
