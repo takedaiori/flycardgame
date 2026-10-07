@@ -81,6 +81,26 @@
   #foot {
     position: absolute; bottom: 8px; left: 0; right: 0; text-align: center;
     font-size: 12px; color: #8d7f6b; z-index: 5; pointer-events: none;
+    line-height: 22px;
+  }
+  /* 语言切换：常驻浅描边表明可点击，切换瞬间金色高亮 */
+  .lang-tag {
+    pointer-events: auto;
+    display: inline-block; margin-left: 6px; padding: 2px 10px;
+    font: inherit; font-size: 12px; font-weight: 700; line-height: 16px;
+    color: #e9dcc4; background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(233,220,196,0.28); border-radius: 999px;
+    cursor: pointer; vertical-align: middle;
+    transition: background .15s ease, border-color .15s ease, color .15s ease;
+  }
+  .lang-tag:hover { background: rgba(255,209,102,0.18); border-color: rgba(255,209,102,0.55); color: #ffd166; }
+  .lang-tag:focus-visible { outline: 2px solid rgba(255,209,102,0.8); outline-offset: 2px; }
+  /* 切换高亮：金色闪光 + 轻微放大，约 0.75s 后自动回到常态 */
+  .lang-tag.flash { animation: langFlash .75s ease-out 1; }
+  @keyframes langFlash {
+    0%   { background: rgba(255,209,102,0.92); border-color: #ffd166; color: #241d17; transform: scale(1.14); }
+    45%  { background: rgba(255,209,102,0.55); border-color: #ffd166; color: #241d17; transform: scale(1.05); }
+    100% { background: rgba(255,255,255,0.06); border-color: rgba(233,220,196,0.28); color: #e9dcc4; transform: scale(1); }
   }
 
   #debug {
@@ -102,11 +122,11 @@
 <div id="app">
   <div id="hud">
     <div class="score-board">
-      <span class="side player">玩家</span>
+      <span class="side player" id="sidePlayer">玩家</span>
       <span class="pips" id="pipsPlayer"><i class="pip"></i><i class="pip"></i></span>
       <span class="vs">:</span>
       <span class="pips" id="pipsAi"><i class="pip"></i><i class="pip"></i></span>
-      <span class="side ai">AI</span>
+      <span class="side ai" id="sideAi">AI</span>
     </div>
     <div id="roundInfo">第 1 局</div>
   </div>
@@ -115,12 +135,12 @@
   <div id="banner"></div>
   <canvas id="game"></canvas>
 
-  <div id="foot">按住卡牌 → 向后拖拽 → 松手推出 &nbsp;·&nbsp; R 重开 &nbsp;·&nbsp; D 调试面板</div>
+  <div id="foot"><span id="footText"></span><button id="langTag" type="button" class="lang-tag"></button></div>
 
   <div id="overlay">
-    <h1 id="ovTitle">比赛结束</h1>
+    <h1 id="ovTitle"></h1>
     <p id="ovDesc"></p>
-    <button id="ovBtn" type="button">再来一场</button>
+    <button id="ovBtn" type="button"></button>
   </div>
 
   <div id="debug"></div>
@@ -154,6 +174,105 @@
 
 /* ============================ 0. 启动与环境校验 ============================ */
 (function bootstrap() {
+  /* ============================ 0-A. 双语文本表 ============================ */
+  const STRINGS = {
+    zh: {
+      sidePlayer: "玩家",
+      sideAi: "AI",
+      roundInfo: "第 {n} 局",
+      phaseDeploy: " · 部署",
+      phaseTable: " · 桌面",
+
+      hintDeploy: "部署阶段：按住你的牌，向后拖拽把它推进左侧区域",
+      hintExtra: "额外投掷：你的牌压住了对方 —— 必须先脱离对方的覆盖区域",
+      hintTurn: "你的回合：按住卡牌向后拖拽，松手推出",
+      hintAiThink: "AI 思考中…",
+      hintAiDeploy: "AI 部署中…",
+      hintTooShort: "拖得太短了 —— 按住卡牌向后拉再松手",
+
+      perfect: "完美覆盖 100%！",
+      roundWin: "覆盖 {p}% · 本局胜利",
+      nearGap: " · 距完美覆盖仅 {g}%",
+      escapeFailChange: "仍在覆盖中 · 脱离失败，换手",
+      escapeFailRetry: "仍在覆盖中 · 这次不算，必须先脱离",
+      extraGrant: "覆盖 {p}% · 获得额外投掷（需先脱离）",
+      escapeOk: "脱离成功 · 恢复轮流投掷",
+      roundStart: "第 {n} 局开始",
+
+      ovTitleDefault: "比赛结束",
+      ovTitleWin: "你赢了",
+      ovTitleLose: "AI 赢了",
+      ovDescPerfect: "达成 100% 完美覆盖，直接赢下整场比赛（{a} : {b}）",
+      ovDescNormal: "三局两胜 · 最终比分 {a} : {b}",
+      ovBtn: "再来一场",
+
+      foot: "按住卡牌 → 向后拖拽 → 松手推出 &nbsp;·&nbsp; R 重开 &nbsp;·&nbsp; D 调试面板 &nbsp;·&nbsp; L",
+      coverage: "覆盖率 {p}%",
+      nearMiss: " · 就差一点！",
+      langToast: "已切换为中文",
+      langOther: "English",   // 中文界面下，按钮显示"切换到英语"
+
+      fatalBoot: "《飞卡》启动失败",
+      fatalRuntime: "运行异常（游戏已安全停止，按 R 可重开）",
+      fatalNoCanvas: "找不到 <canvas id=\"game\">",
+      fatalNoCtx: "当前浏览器无法创建 Canvas 2D 上下文"
+    },
+    en: {
+      sidePlayer: "Player",
+      sideAi: "AI",
+      roundInfo: "Round {n}",
+      phaseDeploy: " · Deploy",
+      phaseTable: " · Table",
+
+      hintDeploy: "Deploy: hold your card, drag backwards, then flick it into the left zone",
+      hintExtra: "Extra throw: you are covering them — you must break away first",
+      hintTurn: "Your turn: hold the card, drag backwards, release to slide",
+      hintAiThink: "AI is thinking…",
+      hintAiDeploy: "AI is deploying…",
+      hintTooShort: "Too short — hold the card and drag further back",
+
+      perfect: "PERFECT COVER 100%!",
+      roundWin: "Coverage {p}% · Round won",
+      nearGap: " · {g}% from perfect",
+      escapeFailChange: "Still covering · break-away failed, turn passes",
+      escapeFailRetry: "Still covering · doesn't count, break away first",
+      extraGrant: "Coverage {p}% · extra throw earned (break away first)",
+      escapeOk: "Break away · back to normal turns",
+      roundStart: "Round {n} begins",
+
+      ovTitleDefault: "Match over",
+      ovTitleWin: "You win",
+      ovTitleLose: "AI wins",
+      ovDescPerfect: "100% perfect cover — match won instantly ({a} : {b})",
+      ovDescNormal: "Best of 3 · final score {a} : {b}",
+      ovBtn: "Play again",
+
+      foot: "Hold card → drag back → release to slide &nbsp;·&nbsp; R restart &nbsp;·&nbsp; D debug &nbsp;·&nbsp; L",
+      coverage: "Coverage {p}%",
+      nearMiss: " · so close!",
+      langToast: "Switched to English",
+      langOther: "中文",   // English UI shows the button as "switch to Chinese"
+
+      fatalBoot: "FlyCard failed to start",
+      fatalRuntime: "Runtime error (game safely stopped, press R to restart)",
+      fatalNoCanvas: "Cannot find <canvas id=\"game\">",
+      fatalNoCtx: "Browser cannot create a Canvas 2D context"
+    }
+  };
+
+  let LANG = "zh";
+  // [NULL-SAFE] 取词：语言包或键缺失时一律退回中文，绝不返回 undefined
+  function t(key, params) {
+    const pack = STRINGS[LANG] || STRINGS.zh;
+    let str = (pack && pack[key] != null) ? pack[key] : null;
+    if (str == null) str = (STRINGS.zh[key] != null ? STRINGS.zh[key] : key);
+    if (!params) return str;
+    return str.replace(/\{(\w+)\}/g, function (m, k) {
+      const v = params[k];
+      return (v === undefined || v === null) ? m : String(v);
+    });
+  }
+
   const $ = (id) => document.getElementById(id);
   const fatalEl = $("fatal");
   let crashed = false;
@@ -162,7 +281,7 @@
     if (!fatalEl || crashed) return;
     crashed = true;
     fatalEl.className = "show";
-    fatalEl.textContent = "《飞卡》启动失败\n\n" + msg;
+    fatalEl.textContent = t("fatalBoot") + "\n\n" + msg;
   }
   function reportError(err, where) {
     const txt = "[" + (where || "runtime") + "] " + (err && err.stack ? err.stack : String(err));
@@ -170,20 +289,22 @@
     if (crashed) return;
     if (fatalEl) {
       fatalEl.className = "show";
-      fatalEl.textContent = "运行异常（游戏已安全停止，按 R 可重开）\n\n" + txt;
+      fatalEl.textContent = t("fatalRuntime") + "\n\n" + txt;
     }
   }
 
   const canvas = $("game");
-  if (!canvas) { fatal("找不到 <canvas id=\"game\">"); return; }
+  if (!canvas) { fatal(t("fatalNoCanvas")); return; }
   const ctx = canvas.getContext ? canvas.getContext("2d") : null; // [NULL-SAFE]
-  if (!ctx) { fatal("当前浏览器无法创建 Canvas 2D 上下文"); return; }
+  if (!ctx) { fatal(t("fatalNoCtx")); return; }
 
   const dom = {
     hint: $("hint"), banner: $("banner"), overlay: $("overlay"),
     ovTitle: $("ovTitle"), ovDesc: $("ovDesc"), ovBtn: $("ovBtn"),
     roundInfo: $("roundInfo"), debug: $("debug"),
-    pipsPlayer: $("pipsPlayer"), pipsAi: $("pipsAi")
+    pipsPlayer: $("pipsPlayer"), pipsAi: $("pipsAi"),
+    sidePlayer: $("sidePlayer"), sideAi: $("sideAi"),
+    foot: $("foot"), footText: $("footText"), langTag: $("langTag")
   };
 
   /* ============================ 1. 常量（v0.4 桌面物理） ============================ */
@@ -252,6 +373,7 @@
     deployShot: false,                         // 本次滑行是否为部署投掷（带中线挡板）
     fps: 0,
     aiPlan: null,
+    lastResult: null,
     running: true
   };
 
@@ -270,8 +392,8 @@
     const d1 = (b[0] - a[0]) * (p1[1] - a[1]) - (b[1] - a[1]) * (p1[0] - a[0]);
     const d2 = (b[0] - a[0]) * (p2[1] - a[1]) - (b[1] - a[1]) * (p2[0] - a[0]);
     const den = d1 - d2;
-    const t = Math.abs(den) < 1e-12 ? 0 : d1 / den;
-    return [p1[0] + (p2[0] - p1[0]) * t, p1[1] + (p2[1] - p1[1]) * t];
+    const u = Math.abs(den) < 1e-12 ? 0 : d1 / den;
+    return [p1[0] + (p2[0] - p1[0]) * u, p1[1] + (p2[1] - p1[1]) * u];
   }
   function clipPolygon(subject, clip) { // Sutherland–Hodgman
     if (!subject || !clip || subject.length === 0) return [];
@@ -420,17 +542,18 @@
       settleT: 0, flightT: 0, wobble: 0, wobbleAng: 0
     };
     const dt = 1 / 60;
-    let t = 0, bounced = 0;
+    let elapsed = 0;
+    let bounced = 0;
     const limit = maxT || 6;
-    while (t < limit) {
+    while (elapsed < limit) {
       const bx = c.vx, by = c.vy;
       const done = physicsStep(c, dt, { deployLimit: false });
       if ((bx !== 0 && Math.sign(c.vx) !== Math.sign(bx)) ||
           (by !== 0 && Math.sign(c.vy) !== Math.sign(by))) bounced++;
-      t += dt;
+      elapsed += dt;
       if (done) break;
     }
-    return { x: c.x, y: c.y, angle: c.angle, t: t, bounced: bounced };
+    return { x: c.x, y: c.y, angle: c.angle, t: elapsed, bounced: bounced };
   }
 
   /* ============================ 6. 布局 / 尺寸 ============================ */
@@ -528,7 +651,7 @@
       clampInside(p);
     }
     G.phase = PHASE.DEPLOY_PLAYER;
-    setHint("部署阶段：按住你的牌，向后拖拽把它推进左侧区域");
+    setHintKey("hintDeploy");
     updateHud();
   }
 
@@ -540,13 +663,13 @@
       G.phase = PHASE.AIM_PLAYER;
       const extra = G.extra;
       if (extra && extra.owner === "player") {
-        setHint("额外投掷：你的牌压住了对方 —— 必须先脱离对方的覆盖区域");
+        setHintKey("hintExtra");
       } else {
-        setHint("你的回合：按住卡牌向后拖拽，松手推出");
+        setHintKey("hintTurn");
       }
     } else {
       G.phase = PHASE.AI_THINK;
-      setHint("AI 思考中…");
+      setHintKey("hintAiThink");
       after(0.7 + Math.random() * 0.5, function () { aiTakeShot(); });
     }
     updateHud();
@@ -598,7 +721,7 @@
 
     // ---- 99.01%+ → 吸附 100% → 直接赢下整场（优先级最高） ----
     if (cov >= PERFECT && !mustEscape) {
-      banner("完美覆盖 100%！", "great");
+      bannerKey("perfect", null, "great");
       startSnap(top, bottom, function () {
         endMatch(thrower, true);
       });
@@ -607,8 +730,9 @@
     // ---- 67%～99% → 赢得本局 ----
     if (cov >= WIN_COVER && !mustEscape) {
       const gap = (PERFECT - cov) * 100;
-      const nearTxt = cov >= NEAR_MISS ? " · 距完美覆盖仅 " + gap.toFixed(1) + "%" : "";
-      banner("覆盖 " + Math.round(cov * 100) + "% · 本局胜利" + nearTxt, "good");
+      const pct = Math.round(cov * 100);
+      const nearP = cov >= NEAR_MISS ? { g: gap.toFixed(1) } : null;
+      bannerKey("roundWin", { p: pct }, "good", nearP ? "nearGap" : null, nearP);
       after(1.1, function () { winRound(thrower); });
       return;
     }
@@ -620,15 +744,15 @@
         extra.attempts += 1;
         if (extra.attempts >= MAX_EXTRA) {
           G.extra = null;
-          banner("仍在覆盖中 · 脱离失败，换手", "");
+          bannerKey("escapeFailChange", null, "");
           after(1.0, function () { beginTurn(thrower === "player" ? "ai" : "player"); });
         } else {
-          banner("仍在覆盖中 · 这次不算，必须先脱离", "");
+          bannerKey("escapeFailRetry", null, "");
           after(1.0, function () { beginTurn(thrower); }); // 仍是自己投
         }
       } else {
         G.extra = { owner: thrower, attempts: 0 };
-        banner("覆盖 " + Math.round(cov * 100) + "% · 获得额外投掷（需先脱离）", "");
+        bannerKey("extraGrant", { p: Math.round(cov * 100) }, "");
         after(1.1, function () { beginTurn(thrower); });
       }
       return;
@@ -636,7 +760,7 @@
     // ---- 0% ----
     if (G.extra && G.extra.owner === thrower) {
       G.extra = null; // 脱离成功，恢复正常轮流
-      banner("脱离成功 · 恢复轮流投掷", "");
+      bannerKey("escapeOk", null, "");
       after(0.9, function () { beginTurn(thrower === "player" ? "ai" : "player"); });
       return;
     }
@@ -683,7 +807,7 @@
     }
     G.round += 1;
     updateHud();
-    banner("第 " + G.round + " 局开始", "");
+    bannerKey("roundStart", { n: G.round }, "");
     after(0.9, function () { resetRound(); });
   }
 
@@ -692,10 +816,11 @@
     clearTimers();
     G.drag = null;
     if (dom.overlay && dom.ovTitle && dom.ovDesc) {
-      dom.ovTitle.textContent = winner === "player" ? "你赢了" : "AI 赢了";
+      G.lastResult = { winner: winner, perfect: !!perfect };
+      dom.ovTitle.textContent = winner === "player" ? t("ovTitleWin") : t("ovTitleLose");
       dom.ovDesc.textContent = perfect
-        ? "达成 100% 完美覆盖，直接赢下整场比赛（" + G.score.player + " : " + G.score.ai + "）"
-        : "三局两胜 · 最终比分 " + G.score.player + " : " + G.score.ai;
+        ? t("ovDescPerfect", { a: G.score.player, b: G.score.ai })
+        : t("ovDescNormal", { a: G.score.player, b: G.score.ai });
       dom.overlay.className = "show";
     }
     setHint("");
@@ -828,7 +953,7 @@
       // 拖拽向量 = 从指针指向卡牌（反方向拖拽 → 朝拖拽反向滑出）
       let dx = c.x - d.px, dy = c.y - d.py;
       let len = Math.hypot(dx, dy);
-      if (len < 6) { setHint("拖得太短了 —— 按住卡牌向后拉再松手"); return; }
+      if (len < 6) { setHintKey("hintTooShort"); return; }
       const maxDrag = Math.min(A.w, A.h) * 0.42;
       const power = Math.min(1, len / maxDrag);
       const speed = MIN_SPEED + (MAX_SPEED - MIN_SPEED) * power;
@@ -854,10 +979,16 @@
       else if (e.key === "d" || e.key === "D") {
         if (dom.debug) dom.debug.className = dom.debug.className === "show" ? "" : "show";
       }
+      else if (e.key === "l" || e.key === "L") { toggleLang(); }
     } catch (err) { reportError(err, "keydown"); }
   });
   if (dom.ovBtn) {
     dom.ovBtn.addEventListener("click", function () { try { resetMatch(); } catch (err) { reportError(err, "restart"); } });
+  }
+  if (dom.langTag) {
+    dom.langTag.addEventListener("click", function (e) {
+      try { e.preventDefault(); toggleLang(); } catch (err) { reportError(err, "langtag"); }
+    });
   }
 
   canvas.addEventListener("pointerdown", onDown);
@@ -868,8 +999,37 @@
   window.addEventListener("resize", function () { try { layout(); } catch (err) { reportError(err, "resize"); } });
 
   /* ============================ 12. UI 辅助 ============================ */
-  function setHint(t) { if (dom.hint) dom.hint.textContent = t || ""; }
+  let lastHint = { key: null, params: null };
+  function setHint(txt) {
+    if (!txt) { lastHint.key = null; lastHint.params = null; }  // 清空提示时一并清除记忆
+    if (dom.hint) dom.hint.textContent = txt || "";
+  }
+  // 按 key 设置提示，切换语言时可原样重译
+  function setHintKey(key, params) {
+    lastHint.key = key || null;
+    lastHint.params = params || null;
+    setHint(key ? t(key, params) : "");
+  }
+  function refreshHint() {
+    if (lastHint.key) setHint(t(lastHint.key, lastHint.params));
+    else setHint("");
+  }
   let bannerTimer = null;
+  let lastBanner = { key: null, params: null, cls: "", suffixKey: null, suffixParams: null };
+  function bannerKey(key, params, cls, suffixKey, suffixParams) {
+    lastBanner.key = key || null;
+    lastBanner.params = params || null;
+    lastBanner.cls = cls || "";
+    lastBanner.suffixKey = suffixKey || null;
+    lastBanner.suffixParams = suffixParams || null;
+    banner(key ? t(key, params) + (suffixKey ? t(suffixKey, suffixParams) : "") : "", cls);
+  }
+  function refreshBanner() {
+    if (!lastBanner.key) return;
+    if (!dom.banner || dom.banner.className.indexOf("show") < 0) return;
+    dom.banner.textContent = t(lastBanner.key, lastBanner.params) +
+      (lastBanner.suffixKey ? t(lastBanner.suffixKey, lastBanner.suffixParams) : "");
+  }
   function banner(text, cls) {
     if (!dom.banner) return;                            // [NULL-SAFE]
     dom.banner.textContent = text;
@@ -877,13 +1037,15 @@
     if (bannerTimer) { clearTimeout(bannerTimer); bannerTimer = null; }
     bannerTimer = setTimeout(function () {
       bannerTimer = null;
+      lastBanner.key = null;
+      lastBanner.params = null;
       if (dom.banner) dom.banner.className = "";
     }, 1500);
   }
   function updateHud() {
     if (dom.roundInfo) {
       const deploying = (G.phase === PHASE.DEPLOY_PLAYER || G.phase === PHASE.DEPLOY_AI);
-      dom.roundInfo.textContent = "第 " + G.round + " 局" + (deploying ? " · 部署" : " · 桌面");
+      dom.roundInfo.textContent = t("roundInfo", { n: G.round }) + (deploying ? t("phaseDeploy") : t("phaseTable"));
     }
     paintPips(dom.pipsPlayer, G.score.player, "player");
     paintPips(dom.pipsAi, G.score.ai, "ai");
@@ -896,6 +1058,48 @@
       if (!el) continue;
       el.className = "pip" + (i < n ? " on " + who : "");
     }
+  }
+
+  /* ============================ 12-B. 语言切换 ============================ */
+  // 刷新所有静态文本（HUD 两侧标签、底部说明、结算按钮）
+  function applyLang() {
+    if (dom.sidePlayer) dom.sidePlayer.textContent = t("sidePlayer");
+    if (dom.sideAi) dom.sideAi.textContent = t("sideAi");
+    if (dom.footText) dom.footText.innerHTML = t("foot");
+    // 按钮始终显示"另一种语言"：中文界面显示 English，英文界面显示中文
+    if (dom.langTag) dom.langTag.textContent = t("langOther");
+    if (dom.ovBtn) dom.ovBtn.textContent = t("ovBtn");
+    // 结算标题：只在结算层未显示时使用默认文案，避免覆盖当前胜负结果
+    if (dom.ovTitle && dom.overlay && dom.overlay.className !== "show") {
+      dom.ovTitle.textContent = t("ovTitleDefault");
+    }
+    updateHud();
+    refreshHint();
+    refreshBanner();
+    // 结算层若正在显示，按当前语言重译胜负文案
+    const res = G.lastResult;
+    if (res && dom.overlay && dom.overlay.className === "show") {
+      if (dom.ovTitle) dom.ovTitle.textContent = res.winner === "player" ? t("ovTitleWin") : t("ovTitleLose");
+      if (dom.ovDesc) {
+        dom.ovDesc.textContent = res.perfect
+          ? t("ovDescPerfect", { a: G.score.player, b: G.score.ai })
+          : t("ovDescNormal", { a: G.score.player, b: G.score.ai });
+      }
+    }
+  }
+  // 重播高亮动画：先移除 class 并强制回流，否则连续切换时动画不会重新播放
+  function flashLangTag() {
+    const el = dom.langTag;
+    if (!el) return;                                    // [NULL-SAFE]
+    el.className = "lang-tag";
+    void el.offsetWidth;                                // 强制回流
+    el.className = "lang-tag flash";
+  }
+  function toggleLang() {
+    LANG = (LANG === "zh") ? "en" : "zh";
+    applyLang();
+    flashLangTag();
+    banner(t("langToast"), "good");
   }
 
   /* ============================ 13. 渲染：俯视牌桌 ============================ */
@@ -1047,10 +1251,10 @@
     };
     const pts = [];
     const dt = 1 / 60;
-    let t = 0;
-    while (t < dur) {
+    let elapsed = 0;
+    while (elapsed < dur) {
       physicsStep(ghost, dt, { deployLimit: false });
-      t += dt;
+      elapsed += dt;
       if (pts.length === 0 || Math.hypot(ghost.x - pts[pts.length - 1].x, ghost.y - pts[pts.length - 1].y) > 7) {
         pts.push({ x: ghost.x, y: ghost.y });
       }
@@ -1128,8 +1332,8 @@
         ctx.fillStyle = near ? "rgba(255,209,102,0.95)" : "rgba(255,255,255,0.75)";
         ctx.textAlign = "center";
         ctx.shadowColor = "rgba(0,0,0,0.6)"; ctx.shadowBlur = 4;
-        let txt = "覆盖率 " + (G.lastCoverage * 100).toFixed(1) + "%";
-        if (near && G.lastCoverage < PERFECT) txt += " · 就差一点！";
+        let txt = t("coverage", { p: (G.lastCoverage * 100).toFixed(1) });
+        if (near && G.lastCoverage < PERFECT) txt += t("nearMiss");
         ctx.fillText(txt, b.x, b.y - b.hh - 16);
         ctx.restore();
       }
@@ -1169,7 +1373,7 @@
               const e = extents(c);
               if (c.x + e.ex > G.midLine) c.x = G.midLine - e.ex;
               G.phase = PHASE.DEPLOY_AI;
-              setHint("AI 部署中…");
+              setHintKey("hintAiDeploy");
               after(0.6, function () { aiDeploy(); });
             } else {
               after(0.3, function () { beginTurn("player"); });
@@ -1249,6 +1453,7 @@
   try { window.__FLYCARD = { G: G, PHASE: PHASE, A: A, coverageOf: coverageOf }; } catch (_) {}
 
   try {
+    applyLang();
     layout();
     resetMatch();
     requestAnimationFrame(frame);
