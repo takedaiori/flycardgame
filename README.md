@@ -81,3 +81,88 @@ MVP 开发中。第一版优先验证的事情只有一件：
 > **“把扑克牌推过去盖住另一张扑克牌”到底好不好玩。**
 
 如果你小时候也在水泥地上蹲过，如果你也记得那种“差一点就翻过来了”的不甘心——试试看，这次不用蹲着了。🂡 → 🂱
+
+
+# 🃏 FlyCard
+
+> **Pick up the grudge you left on the playground.**
+
+If you grew up in the '90s, you probably remember this: squatting on the concrete after school, slamming one card down onto another, hoping to flip it over. If it flipped, that card was yours. A cheap pack of instant noodles from the corner store came with one card inside — and that card was your entire bankroll.
+
+**FlyCard is that game, rebuilt for the computer.** With a few changes that make sense for a digital game: no squatting, no wild arm swings that send your card flying, no bad luck from uneven ground. Instead, it's just **drag → release.** Your card glides in a straight line across a tabletop, then... you wait for it to stop and see how much of your opponent's card it covers.
+
+---
+
+## 🎯 Core Rules
+
+You and the AI each control one playing card on the **same tabletop**, taking turns sliding your card.
+
+> **Cover your opponent's card. Reach 67% coverage and win the round.**
+
+Not "flip it over" but "cover it" — the most intuitive translation from the playground to a computer game. On concrete, whether a card flipped depended half on force and half on cracks and luck. On a top-down table, there are no cracks. Cards glide in straight lines, slow down, and stop. **The outcome becomes controllable, and touch becomes real skill.**
+
+Best of three. If a shot covers **99.01% or more**, the card snaps to 100%, triggering **Perfect Coverage** and instantly winning the entire match, no matter the current score.
+
+---
+
+## 🕹️ How to Play
+
+1. **Deployment** — The table starts empty. Drag your card into the left-half deployment zone and release to slide it in. A center barrier exists during deployment; you cannot cross it.
+2. **Throw** — Press and hold your card, then **drag in the opposite direction** of where you want it to go. Longer drag = more force. Release.
+3. **Slide** — The card glides along the table, decelerating in a straight line. Hitting the wooden rail causes a big speed loss and a bounce; at most one effective bounce.
+4. **Judge** — No win/loss is calculated during sliding. **Only after the card stops is coverage measured.**
+5. **Extra Throw** — If you partially cover the opponent's card but stay under 67%, and your card is on top, you get an extra throw. But **you cannot keep covering.** You must push your card away from the opponent's coverage area and reset the distance.
+
+That last rule sounds fiddly, but it's the most interesting part of the game. It prevents "stick to the opponent and micro-adjust until 67%," forcing you to think about **trade-offs between angle and force.**
+
+---
+
+## ⚙️ Physics
+
+Although inspired by playground card-slapping, FlyCard's physics isn't "flick and pray."
+
+| Feature | Behavior |
+|---|---|
+| **No Gravity** | Top-down view; cards slide horizontally on the table and never fall. |
+| **Coulomb Friction** | Constant deceleration; trajectory is a **straight line**; stopping distance is proportional to the square of initial speed. |
+| **Rail Damping** | After hitting a rail, normal velocity drops to 34%, tangential velocity keeps 78%. Bounces are a recovery tool, not a main strategy. |
+| **Restrained Spin** | A slight spin on release, quickly damped, purely visual, and does not affect the landing point. |
+| **Paper Contact** | Cards can overlap and touch but **never bounce apart**; max slide is 0.5% of card size. |
+
+A straight-line trajectory feels pure: **how hard you push, how far it goes, how much you miss — all clear.** No pinball chaos, no billiard collisions. Just paper sliding on cloth.
+
+---
+
+## 🤖 The AI Is Meant to Be Weaker
+
+This part matters.
+
+The AI is not there to make you feel like you're playing a grandmaster. **The AI is there to give you room to make mistakes.**
+
+- Over half of AI throws **completely miss** — 0% coverage.
+- AI hit rate (≥67%) is around **11%–14%**; a skilled player can reach **49%**.
+- AI average coverage is just over 20%; a player can reach 51%.
+
+The AI will misjudge direction, underpower, overpower, and choose a clearly worse line. Occasionally — about 7% of the time — it lands a beautiful cover. But most of the time, **when you miss, the AI misses too.**
+
+That's the forgiveness a casual tabletop toy should have.
+
+---
+
+## 🧱 Tech Stack
+
+- **HTML5 Canvas + vanilla JavaScript + CSS**
+- **Runs as a single HTML file**
+- No server, no database, no account, no third-party game engine
+
+Open it in a browser and play. Close it and you're done.
+
+---
+
+## 🚧 Current Status
+
+MVP in development. The first version only needs to answer one question:
+
+> **Is "slide a playing card across a table to cover another playing card" actually fun?**
+
+If you ever squatted on concrete as a kid, if you still remember that sting of "so close to flipping it" — give it a try. This time, you don't have to squat. 🂡 → 🂱
